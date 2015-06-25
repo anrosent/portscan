@@ -26,24 +26,38 @@ func main() {
 	flag.Parse()
 
 	if host == "" || port_range_arg == "" {
-		fmt.Println("Usage: portscan -c <host> -range [port | start-end] [-d]")
+		fmt.Println("Usage: portscan -c <host> -range port|start-end, [port|start-end ...] [-debug]")
 		os.Exit(1)
 	}
-	pr, err := parseRange(port_range_arg)
+	prs, err := parseRanges(port_range_arg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	results := ScanPorts(host, pr)
-	for port, success := range results {
-		if success || debug {
-			fmt.Printf("%v: %v\n", port, success)
+	for _, pr := range prs {
+		results := ScanPorts(host, pr)
+		for port, success := range results {
+			if success || debug {
+				fmt.Printf("%v: %v\n", port, success)
+			}
 		}
 	}
 }
 
+func parseRanges(ranges_str string) ([]*PortRange, error) {
+	parts := strings.Split(ranges_str, ",")
+	ranges := make([]*PortRange, 0)
+	for _, part := range parts {
+		rg, err := parseRange(part)
+		if err != nil {
+			return nil, err
+		}
+		ranges = append(ranges, rg)
+	}
+	return ranges, nil
+}
+
 //TODO: check overflow
-//TODO: add commas to parse multiple ranges
 func parseRange(range_str string) (*PortRange, error) {
 	parts := strings.SplitN(range_str, "-", 2)
 	nums := make([]uint64, len(parts))
