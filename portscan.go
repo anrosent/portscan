@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// Need worker pool because running 1 goroutine per port exhausts file descriptors
 const MAX_WORKERS = 200
 
 type PortRange struct {
@@ -17,6 +18,11 @@ type PortRange struct {
 	End   uint64
 }
 
+func (pr *PortRange) String() string {
+	return fmt.Sprintf("[%v,%v)", pr.Start, pr.End)
+}
+
+// Run the port scanner
 func main() {
 	var host, port_range_arg string
 	var debug bool
@@ -34,6 +40,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Format results
 	for _, pr := range prs {
 		results := ScanPorts(host, pr)
 		for port, success := range results {
@@ -44,6 +51,7 @@ func main() {
 	}
 }
 
+// Parse port ranges spec
 func parseRanges(ranges_str string) ([]*PortRange, error) {
 	parts := strings.Split(ranges_str, ",")
 	ranges := make([]*PortRange, 0)
@@ -84,28 +92,32 @@ func parseRange(range_str string) (*PortRange, error) {
 	}
 }
 
-func (pr *PortRange) String() string {
-	return fmt.Sprintf("[%v,%v)", pr.Start, pr.End)
-}
-
+// Container for scan results from workers
 type ScanResult struct {
 	Port    uint64
 	Success bool
 	Err     error
 }
 
+// Run the scan with a worker pool; memory usage grows in proportion
+// with number of ports scanned to prevent deadlock from blocking channels
 func ScanPorts(host string, pr *PortRange) map[uint64]bool {
 	num_ports := pr.End - pr.Start + 1
 	results := make(map[uint64]bool)
 	jobpipe := make(chan uint64, num_ports)
 	respipe := make(chan *ScanResult, num_ports)
+
+	// Start workers
 	for worker := 0; worker < MAX_WORKERS; worker++ {
 		go scanWorker(host, jobpipe, respipe)
 	}
+
+	// Seed w/ jobs
 	for port := pr.Start; port < pr.End+1; port++ {
 		jobpipe <- port
 	}
 
+	// Receive results
 	received := uint64(0)
 	for received < pr.End-pr.Start {
 		res := <-respipe
@@ -115,12 +127,16 @@ func ScanPorts(host string, pr *PortRange) map[uint64]bool {
 	return results
 }
 
+// Worker function; pull from job queue forever and return results on result
+// queue
 func scanWorker(host string, jobpipe chan uint64, respipe chan *ScanResult) {
 	for job := <-jobpipe; ; job = <-jobpipe {
 		respipe <- scanPort(host, job)
 	}
 }
 
+// Simple scan of a single port
+//	- Just tries to connect to <host>:<port> over TCP and checks for error
 func scanPort(host string, port uint64) *ScanResult {
 	_, err := net.Dial("tcp", fmt.Sprintf("%v:%v", host, port))
 	result := ScanResult{
