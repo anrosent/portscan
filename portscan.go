@@ -11,7 +11,7 @@ import (
 )
 
 // Need worker pool because running 1 goroutine per port exhausts file descriptors
-const MAX_WORKERS = 200
+const MAX_WORKERS = 100
 
 type PortRange struct {
 	Start uint64
@@ -27,7 +27,7 @@ func main() {
 	var host, port_range_arg string
 	var debug bool
 	flag.StringVar(&host, "c", "", "host to scan")
-	flag.StringVar(&port_range_arg, "range", "", "ports to scan")
+	flag.StringVar(&port_range_arg, "r", "", "ports to scan")
 	flag.BoolVar(&debug, "debug", false, "include results on all ports")
 	flag.Parse()
 
@@ -138,11 +138,14 @@ func scanWorker(host string, jobpipe chan uint64, respipe chan *ScanResult) {
 // Simple scan of a single port
 //	- Just tries to connect to <host>:<port> over TCP and checks for error
 func scanPort(host string, port uint64) *ScanResult {
-	_, err := net.Dial("tcp", fmt.Sprintf("%v:%v", host, port))
+	conn, err := net.Dial("tcp", fmt.Sprintf("%v:%v", host, port))
 	result := ScanResult{
 		Port:    port,
 		Success: err == nil,
 		Err:     err,
+	}
+	if conn != nil {
+		conn.Close()
 	}
 	return &result
 }
