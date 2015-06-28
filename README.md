@@ -1,7 +1,7 @@
 portscan
 ===
 
-This is a simple concurrent portscanner. Point it at a host and give it some ranges and it will tell you if those ports are open!
+This is a simple concurrent portscanner. Point it at a host, give it some ranges, and it will tell you if those ports are open!
 
 Still quite slow.
 
